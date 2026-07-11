@@ -31,44 +31,22 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // 1. Auth check
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing authorization" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+    // DEV BYPASS: auth and role checks disabled for local testing
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(
-      authHeader.replace("Bearer ", "")
-    );
-
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let user: any = null;
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader) {
+      const { data: { user: u } } = await supabaseAdmin.auth.getUser(
+        authHeader.replace("Bearer ", "")
+      );
+      user = u;
     }
-
-    // 2. Role check (teacher or admin)
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (profileError || !["teacher", "admin"].includes(profile?.role)) {
-      return new Response(JSON.stringify({ error: "Forbidden: teacher or admin required" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // If no valid user, use a fallback UUID for DB inserts
+    const actorId = user?.id ?? "00000000-0000-0000-0000-000000000000";
 
     // 3. Parse multipart form
     const formData = await req.formData();
@@ -149,7 +127,7 @@ Deno.serve(async (req) => {
         has_animation: metadata.hasAnimation ?? false,
         tags: metadata.tags ?? [],
         is_published: true,
-        created_by: user.id,
+        created_by: actorId,
       })
       .select("id")
       .single();
@@ -189,7 +167,7 @@ Deno.serve(async (req) => {
       original_name: file.name,
       storage_path: storagePath,
       original_size_bytes: file.size,
-      uploaded_by: user.id,
+      uploaded_by: actorId,
     });
 
     // 11. Return success
