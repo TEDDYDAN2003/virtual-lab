@@ -138,21 +138,75 @@ export default function AdminModelsPage() {
     setSaving(true);
     setSaveMessage(null);
 
-    // TODO: Replace with actual Supabase Edge Function call
-    // const payload = uploads.map(u => ({
-    //   file: u.file,
-    //   metadata: { ... }
-    // }));
-    // await fetch('/api/admin/upload-models', { method: 'POST', body: formData });
+    const edgeUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/compress-and-upload`;
+    const results: { title: string; success: boolean; error?: string }[] = [];
 
-    console.log("Models ready for upload:", uploads);
+    for (const upload of uploads) {
+      try {
+        const formData = new FormData();
+        formData.append("file", upload.file);
+        formData.append(
+          "metadata",
+          JSON.stringify({
+            title: upload.title,
+            subject: upload.subject,
+            strand: upload.strand,
+            subStrand: upload.subStrand,
+            gradeLevel: upload.gradeLevel,
+            description: upload.description,
+            modelScale: upload.modelScale,
+            hasAnimation: upload.hasAnimation,
+            tags: upload.tags
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean),
+            hotspots: upload.hotspots,
+          })
+        );
 
-    setTimeout(() => {
-      setSaving(false);
+        const res = await fetch(edgeUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+          },
+          body: formData,
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          results.push({
+            title: upload.title,
+            success: false,
+            error: data.error || `HTTP ${res.status}`,
+          });
+        } else {
+          results.push({ title: upload.title, success: true });
+        }
+      } catch (err: any) {
+        results.push({
+          title: upload.title,
+          success: false,
+          error: err.message,
+        });
+      }
+    }
+
+    setSaving(false);
+
+    const succeeded = results.filter((r) => r.success).length;
+    const failed = results.filter((r) => !r.success).length;
+
+    if (failed === 0) {
+      setSaveMessage(`✅ All ${succeeded} model(s) uploaded successfully!`);
+      // Optionally clear uploads after success
+      // setUploads([]);
+    } else {
       setSaveMessage(
-        `${uploads.length} model(s) prepared. Connect Supabase to complete upload.`
+        `✅ ${succeeded} uploaded, ❌ ${failed} failed. Check console for details.`
       );
-    }, 800);
+      console.error("Upload failures:", results.filter((r) => !r.success));
+    }
   }, [uploads]);
 
   const allValid = uploads.every(

@@ -7,137 +7,122 @@ A Next.js-powered virtual laboratory for CBC (Competency-Based Curriculum) educa
 - **Framework:** Next.js 14 (App Router)
 - **3D Engine:** React Three Fiber + Three.js
 - **Styling:** Tailwind CSS
-- **Backend:** Supabase (Storage, Auth, Database, Realtime)
-- **Mobile:** Expo + React Native (shares Supabase data layer)
+- **Backend:** Supabase (Storage, Auth, Database, Edge Functions)
+- **Admin:** Built-in dashboard for uploading GLBs + metadata + hotspots
 
 ## Features
 
-- **Interactive 3D Lab** — Rotate, zoom, and explore real GLB models (animal cells, neurons, bacteria, horses, foxes, fish, birds, plants, brain stem, fossils)
+- **Interactive 3D Lab** — Rotate, zoom, click hotspots for part descriptions with audio narration
 - **CBC Alignment** — Every experiment mapped to Strand, Sub-Strand, and Grade Level
+- **Admin Dashboard** (`/admin/models`) — Drag-and-drop multi-GLB upload, metadata forms, click-to-place hotspots, 3D preview
 - **Video Library** — Practical demonstrations with duration and subject filters
 - **Apparatus Gallery** — Lab equipment with safety notes and handling guides
 - **Responsive Design** — Works on desktop, tablet, and mobile browsers
-- **Performance Optimized** — Lazy loading, Draco-ready GLB pipeline, LOD strategy
 
-## Real 3D Models Included
+## Admin Dashboard
 
-All models are stored in `public/models/` and load locally (no external CDN dependency at runtime):
+Navigate to `/admin/models` to:
 
-### Biology / Cell Models (NIH-sourced)
-| Model | File | Size | Source |
-|-------|------|------|--------|
-| Animal Cell | `animal-cell-nih.glb` | 1.5 MB | Cell Architecture Studio / NIH |
-| Neuron | `neuron-nih.glb` | 2.8 MB | Cell Architecture Studio / NIH |
-| Bacteria Wall | `bacteria-wall-nih.glb` | 482 KB | Cell Architecture Studio / NIH |
+1. **Drop multiple `.glb` files** — each gets its own metadata card
+2. **Fill metadata** — title, subject, strand, sub-strand, grade, description, scale, animation, tags
+3. **Place hotspots** — click "Add Hotspot" then click on the 3D model → sphere appears
+4. **Label hotspots** — type part name and description for each
+5. **Save** — uploads to Supabase Storage + inserts into database via Edge Function
 
-### Biological Specimens (Animals)
-| Model | File | Size | Source |
-|-------|------|------|--------|
-| Horse | `horse.glb` | 182 KB | Three.js Examples |
-| Fox | `fox.glb` | 163 KB | Khronos glTF Sample Assets |
-| Barramundi Fish | `barramundi-fish.glb` | 12.5 MB | Khronos glTF Sample Assets |
-| Mosquito in Amber | `mosquito-in-amber.glb` | 24 MB | Khronos glTF Sample Assets |
-| Flamingo | `flamingo.glb` | 77 KB | Three.js Examples |
-| Parrot | `parrot.glb` | 97 KB | Three.js Examples |
-| Stork | `stork.glb` | 77 KB | Three.js Examples |
-
-### Plants & Botany
-| Model | File | Size | Source |
-|-------|------|------|--------|
-| Avocado | `avocado.glb` | 7.9 MB | Khronos glTF Sample Assets |
-| Glass Vase Flowers | `glass-vase-flowers.glb` | 1.8 MB | Khronos glTF Sample Assets |
-| Tropical Plant | `diffuse-transmission-plant.glb` | 5.6 MB | Khronos glTF Sample Assets |
-
-### Anatomy
-| Model | File | Size | Source |
-|-------|------|------|--------|
-| Brain Stem | `brain-stem.glb` | 3.1 MB | Khronos glTF Sample Assets |
-
-## Getting Started
-
-### 1. Install dependencies
+## Quick Start
 
 ```bash
 cd virtual-lab
 npm install
 ```
 
-### 2. Environment Variables
-
-Create a `.env.local` file:
-
+Create `.env.local`:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
 
-> **Security Warning:** Use the **anon/public** key for the client app. The service role key should only be used in Supabase Edge Functions or server-side code.
-
-### 3. Run locally
-
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+## Supabase Setup (One-Time)
 
-## 3D Asset Pipeline
+### 1. Database Schema
 
-Models are loaded from `public/models/` via local paths (`/models/...`). To add new models:
+Run `supabase/schema.sql` in the Supabase SQL Editor. This creates:
+- `experiments` table
+- `hotspots` table
+- `profiles` table (with roles: student / teacher / admin)
+- `model_uploads` audit table
+- RLS policies for secure access
 
-1. Place `.glb` files in `public/models/`
-2. Add an entry to `lib/data.ts` with the correct `modelUrl` (e.g., `/models/my-model.glb`)
-3. Tune `modelScale` so the model fits nicely in the viewer
-4. Set `hasAnimation: true` if the model includes skeletal animation
+### 2. Storage Buckets
 
-For production, you may want to:
-- Draco-compress large models (>5 MB) to reduce file size
-- Upload to Supabase Storage and use public URLs
-- Implement LOD (Level of Detail) variants for low-end devices
+Run `supabase/storage-bucket.sql` in the SQL Editor. This creates:
+- `lab-models` bucket (public read, 100 MB limit, `.glb` only)
+- `lab-thumbnails` bucket (public read, 5 MB limit, images only)
 
-## Mobile (Expo) Strategy
+### 3. Edge Function
 
-The mobile app shares the same Supabase project. For 3D on Expo:
+Deploy the upload handler:
 
-- **Option A:** Use `@react-three/fiber` native via `expo-gl` (same React code, native context)
-- **Option B:** WebView fallback loading the Next.js `/lab/3d/[id]` route (single codebase, easiest maintenance)
-- **Option C:** Pre-render 360° image sequences for low-end devices
+```bash
+supabase login
+supabase link --project-ref your-project-ref
+supabase functions deploy compress-and-upload
+supabase secrets set SUPABASE_URL=https://your-project.supabase.co
+supabase secrets set SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
+
+### 4. Seed Existing Data (Optional)
+
+If migrating from `lib/data.ts`:
+
+```bash
+export SUPABASE_URL=https://your-project.supabase.co
+export SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+npx tsx scripts/seed-supabase.ts
+```
 
 ## Project Structure
 
 ```
-public/models/             # Local GLB model assets
 app/
-  lab/
-    3d/[id]/page.tsx      # 3D viewer route
-    video/page.tsx         # Video library
-    apparatus/page.tsx     # Apparatus gallery
-  page.tsx                 # Home / experiment browser
-  layout.tsx               # Root layout with Navbar
+  admin/models/page.tsx      # Admin dashboard (multi-upload + metadata + hotspots)
+  lab/3d/[id]/page.tsx       # 3D viewer route
+  lab/video/page.tsx          # Video library
+  lab/apparatus/page.tsx      # Apparatus gallery
 components/
-  ModelViewer.tsx          # R3F canvas + controls + animations
-  ExperimentCard.tsx       # Experiment preview card
-  VideoCard.tsx            # Video preview card
-  ApparatusCard.tsx        # Equipment card with safety
-lib/
-  data.ts                  # CBC-mapped experiments with real model URLs
-  supabaseClient.ts        # Browser Supabase client
-types/
-  index.ts                 # TypeScript types
+  ModelViewer.tsx             # R3F canvas + controls + hotspot raycasting
+  PartInfoModal.tsx           # Part description modal with audio narration
+  admin/AdminModelPreview.tsx # Admin 3D preview with click-to-place hotspots
+supabase/
+  schema.sql                  # Full database schema
+  storage-bucket.sql          # Storage bucket + policies
+  functions/compress-and-upload/  # Edge Function (validate + upload + DB insert)
+scripts/
+  download-models.js          # Fetch GLBs from NIH/Khronos/Three.js
+  seed-supabase.ts            # One-time migration from lib/data.ts
 ```
 
-## CBC Features Roadmap
+## 3D Asset Pipeline
 
-- [x] Strand / Sub-Strand mapping on every experiment
-- [x] Grade-level badges
-- [x] Real 3D models (cells, animals, plants, anatomy)
-- [x] Animated specimen support
-- [ ] Digital portfolio export (PDF generation from session data)
-- [ ] Teacher dashboard (Supabase-powered analytics)
-- [ ] Real-time collaborative labs (Supabase Realtime)
-- [ ] Offline caching for mobile (Expo FileSystem + SQLite)
-- [ ] Swahili language toggle
-- [ ] Competency badges & rubrics
+| Stage | Tool | What happens |
+|-------|------|-------------|
+| Source | Blender / Sketchfab / NIH | Export or download `.glb` |
+| Admin Upload | `/admin/models` | Drag-drop, add metadata, place hotspots |
+| Edge Function | Supabase | Validate, upload to Storage, insert DB rows |
+| Delivery | Supabase CDN | Cached public URL served to students |
+| Render | React Three Fiber | `useGLTF()` loads + `HotspotMarker` renders spheres |
+
+## Security
+
+- **RLS enabled** on all tables and Storage buckets
+- **No client uploads** — all uploads go through the `compress-and-upload` Edge Function
+- **Role-based access** — only `teacher`/`admin` can upload; students read-only
+- **File validation** — mime-type, size limit (100 MB), GLB extension check
+- **Audit trail** — `model_uploads` table tracks who uploaded what and when
 
 ## License
 
