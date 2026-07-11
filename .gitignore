@@ -3,4 +3,5 @@ node_modules
 .env.local
 .env.*.local
 dist
-outpublic/models/*.glb
+out
+public/models/*.glb

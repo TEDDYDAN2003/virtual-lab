@@ -1,7 +1,7 @@
 import { experiments } from "@/lib/data";
 import ModelViewer from "@/components/ModelViewer";
 import { notFound } from "next/navigation";
-import { ArrowLeft, BookOpen, Layers, Rotate3D, Play } from "lucide-react";
+import { ArrowLeft, BookOpen, Layers, Rotate3D, Play, MousePointerClick } from "lucide-react";
 import Link from "next/link";
 
 export function generateStaticParams() {
@@ -16,6 +16,8 @@ export default function ModelPage({ params }: { params: { id: string } }) {
   if (!experiment || experiment.assetType !== "3d_model") {
     notFound();
   }
+
+  const hasInteractivity = (experiment.parts?.length || 0) > 0 || (experiment.hotspots?.length || 0) > 0;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -52,6 +54,8 @@ export default function ModelPage({ params }: { params: { id: string } }) {
             modelUrl={experiment.modelUrl!}
             scale={experiment.modelScale}
             hasAnimation={experiment.hasAnimation}
+            parts={experiment.parts}
+            hotspots={experiment.hotspots}
           />
 
           <div className="bg-white rounded-lg border border-slate-200 p-4">
@@ -95,6 +99,30 @@ export default function ModelPage({ params }: { params: { id: string } }) {
               </div>
             </div>
           </div>
+
+          {hasInteractivity && (
+            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+              <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
+                <MousePointerClick className="w-4 h-4 text-celebra-600" /> Interactive Parts
+              </h3>
+              <p className="text-xs text-slate-500 mb-3">
+                Click any blue sphere on the model to learn about that structure.
+              </p>
+              <ul className="space-y-2">
+                {(experiment.hotspots || experiment.parts || []).map((item, i) => (
+                  <li
+                    key={i}
+                    className="flex items-start gap-2 text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2"
+                  >
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-celebra-100 text-celebra-700 text-xs font-bold shrink-0 mt-0.5">
+                      {i + 1}
+                    </span>
+                    <span className="font-medium">{"label" in item ? item.label : item.meshName}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
             <h3 className="font-bold text-slate-900 mb-3 flex items-center gap-2">

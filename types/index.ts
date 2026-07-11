@@ -13,6 +13,22 @@ export interface Experiment {
   hasAnimation?: boolean;
   videoUrl?: string;
   tags: string[];
+  /** Clickable parts for models with named meshes */
+  parts?: ModelPart[];
+  /** Position-based hotspots for merged meshes */
+  hotspots?: Hotspot[];
+}
+
+export interface ModelPart {
+  meshName: string;
+  label: string;
+  description: string;
+}
+
+export interface Hotspot {
+  position: [number, number, number];
+  label: string;
+  description: string;
 }
 
 export interface ApparatusItem {
@@ -31,11 +47,5 @@ export interface VideoLesson {
   duration: string;
   thumbnail: string;
   videoUrl: string;
-  description: string;
-}
-
-export interface Hotspot {
-  position: [number, number, number];
-  label: string;
   description: string;
 }
