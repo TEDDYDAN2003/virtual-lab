@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useRef, useState, useEffect, useCallback, useMemo } from "react";
-import { Canvas, useFrame, ThreeEvent } from "@react-three/fiber";
+import { Canvas, useFrame, ThreeEvent, useThree } from "@react-three/fiber";
 import {
   OrbitControls,
   useGLTF,
@@ -10,11 +10,154 @@ import {
   ContactShadows,
   useAnimations,
   Center,
+  useProgress,
 } from "@react-three/drei";
 import { Group, Mesh, Object3D, Raycaster, Vector2 } from "three";
-import { Loader2, Info, ZoomIn, ZoomOut, RotateCcw, Play, Circle } from "lucide-react";
+import {
+  Loader2,
+  Info,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Play,
+  Wifi,
+  WifiOff,
+  AlertTriangle,
+  Database,
+  Gauge,
+} from "lucide-react";
 import { ModelPart, Hotspot } from "@/types";
 import PartInfoModal from "./PartInfoModal";
+
+/* ------------------------------------------------------------------ */
+/*  Draco loader setup — must be done before any useGLTF calls          */
+/* ------------------------------------------------------------------ */
+import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
+
+const dracoLoader = new DRACOLoader();
+// Use a CDN for the decoder — no local binary needed
+dracoLoader.setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.5.6/");
+
+/* ------------------------------------------------------------------ */
+/*  Format bytes for human reading (e.g. 4.2 MB)                        */
+/* ------------------------------------------------------------------ */
+function formatBytes(bytes: number, decimals = 1) {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
+}
+
+/* ------------------------------------------------------------------ */
+/*  Lazy-load wrapper — only mounts Canvas when in viewport             */
+/* ------------------------------------------------------------------ */
+function useInViewport<T extends HTMLElement>(options?: IntersectionObserverInit) {
+  const ref = useRef<T>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setIsVisible(true);
+        observer.disconnect(); // load once
+      }
+    }, { threshold: 0.05, ...options });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [options]);
+
+  return { ref, isVisible };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Loading progress tracker (drei useProgress)                         */
+/* ------------------------------------------------------------------ */
+function LoadingScreen({
+  fileSize,
+  lowDataMode,
+}: {
+  fileSize?: number;
+  lowDataMode: boolean;
+}) {
+  const { active, progress, errors, item, loaded, total } = useProgress();
+  const [showDetails, setShowDetails] = useState(false);
+
+  const pct = Math.min(100, Math.round(progress));
+  const estimatedSize = total > 0 ? total : fileSize;
+
+  return (
+    <Html center>
+      <div className="flex flex-col items-center text-slate-700 max-w-xs">
+        {/* Spinner + % */}
+        <div className="relative w-20 h-20 mb-4">
+          <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+            <path
+              className="text-slate-200"
+              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+            />
+            <path
+              className="text-celebra-600"
+              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeDasharray={`${pct}, 100`}
+              strokeLinecap="round"
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center text-sm font-bold">
+            {pct}%
+          </div>
+        </div>
+
+        <p className="text-sm font-semibold mb-1">Loading 3D Model…</p>
+
+        {estimatedSize && estimatedSize > 0 && (
+          <p className="text-xs text-slate-500 mb-2">
+            <Database className="w-3 h-3 inline mr-1" />
+            {formatBytes(loaded)} of ~{formatBytes(estimatedSize)} downloaded
+          </p>
+        )}
+
+        {lowDataMode && estimatedSize && estimatedSize > 3 * 1024 * 1024 && (
+          <div className="flex items-start gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700 mt-1">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>
+              This model is large ({formatBytes(estimatedSize)}). On mobile data this costs
+              approximately <strong>KES {(estimatedSize / 1024 / 1024 * 3).toFixed(0)}</strong>.
+            </span>
+          </div>
+        )}
+
+        {errors.length > 0 && (
+          <div className="mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <strong>Load error:</strong> {errors[0]}
+          </div>
+        )}
+
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="mt-2 text-[10px] text-slate-400 hover:text-slate-600 underline"
+        >
+          {showDetails ? "Hide" : "Show"} details
+        </button>
+
+        {showDetails && item && (
+          <p className="mt-1 text-[10px] text-slate-400 break-all max-w-[200px]">
+            {item}
+          </p>
+        )}
+      </div>
+    </Html>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /*  Hotspot sphere — clickable, with label tooltip                      */
@@ -67,7 +210,7 @@ function HotspotMarker({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Clickable mesh wrapper — attaches onClick to named GLB meshes      */
+/*  Clickable mesh wrapper                                              */
 /* ------------------------------------------------------------------ */
 function ClickableMeshes({
   scene,
@@ -88,7 +231,6 @@ function ClickableMeshes({
     return map;
   }, [scene]);
 
-  // Wrap matching meshes with click handlers
   useEffect(() => {
     const handlers: Array<() => void> = [];
 
@@ -145,7 +287,12 @@ function Model({
   onPartClick: (part: Hotspot | ModelPart) => void;
 }) {
   const group = useRef<Group>(null);
-  const { scene, animations } = useGLTF(url);
+
+  // Use Draco loader for compressed models, fallback gracefully for uncompressed
+  const { scene, animations } = useGLTF(url, true, true, (loader) => {
+    loader.setDRACOLoader(dracoLoader);
+  });
+
   const { actions, names } = useAnimations(animations, group);
 
   useEffect(() => {
@@ -163,17 +310,14 @@ function Model({
     }
   });
 
-  /* Raycasting: when user clicks empty space, check if a named mesh was hit */
   const handleCanvasClick = useCallback(
     (e: ThreeEvent<MouseEvent>) => {
-      // If a mesh with our custom handler was clicked, let it handle it
       const clickedMesh = e.object as Mesh;
       if (clickedMesh.userData._clickable && (clickedMesh as any).onClick) {
         (clickedMesh as any).onClick(e);
         return;
       }
 
-      // Otherwise try to find a matching part by name
       let target: Object3D | null = e.object;
       while (target) {
         if ((target as Mesh).isMesh && target.name) {
@@ -196,12 +340,10 @@ function Model({
         <primitive object={scene} scale={scale} />
       </Center>
 
-      {/* Attach click handlers to known named meshes */}
       {parts.length > 0 && (
         <ClickableMeshes scene={scene} parts={parts} onPartClick={onPartClick} />
       )}
 
-      {/* Position-based hotspots for merged meshes */}
       {hotspots.map((h, i) => (
         <HotspotMarker
           key={i}
@@ -224,6 +366,8 @@ function Scene({
   parts,
   hotspots,
   onPartClick,
+  fileSize,
+  lowDataMode,
 }: {
   modelUrl: string;
   scale?: number;
@@ -231,6 +375,8 @@ function Scene({
   parts?: ModelPart[];
   hotspots?: Hotspot[];
   onPartClick: (part: Hotspot | ModelPart) => void;
+  fileSize?: number;
+  lowDataMode: boolean;
 }) {
   return (
     <>
@@ -239,12 +385,7 @@ function Scene({
       <directionalLight position={[-5, 3, -5]} intensity={0.4} />
       <Suspense
         fallback={
-          <Html center>
-            <div className="flex flex-col items-center text-celebra-700">
-              <Loader2 className="w-8 h-8 animate-spin mb-2" />
-              <span className="text-sm font-medium">Loading 3D Model...</span>
-            </div>
-          </Html>
+          <LoadingScreen fileSize={fileSize} lowDataMode={lowDataMode} />
         }
       >
         <Model
@@ -285,15 +426,22 @@ export default function ModelViewer({
   hasAnimation,
   parts,
   hotspots,
+  fileSize,
 }: {
   modelUrl: string;
   scale?: number;
   hasAnimation?: boolean;
   parts?: ModelPart[];
   hotspots?: Hotspot[];
+  fileSize?: number; // bytes, for data-cost display
 }) {
   const [showHelp, setShowHelp] = useState(true);
   const [selectedPart, setSelectedPart] = useState<Hotspot | ModelPart | null>(null);
+  const [lowDataMode, setLowDataMode] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("celebra-low-data") === "true";
+  });
+  const { ref, isVisible } = useInViewport<HTMLDivElement>();
 
   const handlePartClick = useCallback(
     (part: Hotspot | ModelPart) => {
@@ -302,19 +450,82 @@ export default function ModelViewer({
     []
   );
 
+  const toggleLowData = useCallback(() => {
+    setLowDataMode((prev) => {
+      const next = !prev;
+      localStorage.setItem("celebra-low-data", String(next));
+      return next;
+    });
+  }, []);
+
   return (
     <>
-      <div className="relative w-full h-[60vh] md:h-[70vh] bg-gradient-to-br from-slate-50 to-slate-200 rounded-xl overflow-hidden shadow-inner border border-slate-200">
-        <Canvas shadows camera={{ position: [0, 1.5, 4], fov: 45 }}>
-          <Scene
-            modelUrl={modelUrl}
-            scale={scale}
-            hasAnimation={hasAnimation}
-            parts={parts}
-            hotspots={hotspots}
-            onPartClick={handlePartClick}
-          />
-        </Canvas>
+      {/* Data usage bar */}
+      {fileSize && fileSize > 0 && (
+        <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-t-lg px-4 py-2 text-xs">
+          <div className="flex items-center gap-2 text-slate-600">
+            <Database className="w-3.5 h-3.5" />
+            <span>
+              Model size: <strong>{formatBytes(fileSize)}</strong>
+              {fileSize > 5 * 1024 * 1024 && (
+                <span className="ml-1 text-amber-600">
+                  (~KES {((fileSize / 1024 / 1024) * 3).toFixed(0)} on mobile data)
+                </span>
+              )}
+            </span>
+          </div>
+          <button
+            onClick={toggleLowData}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${
+              lowDataMode
+                ? "bg-amber-50 text-amber-700 border-amber-200"
+                : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
+            }`}
+            title="Warn before loading large models"
+          >
+            {lowDataMode ? (
+              <>
+                <WifiOff className="w-3 h-3" /> Low Data On
+              </>
+            ) : (
+              <>
+                <Wifi className="w-3 h-3" /> Low Data Off
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      <div
+        ref={ref}
+        className="relative w-full h-[60vh] md:h-[70vh] bg-gradient-to-br from-slate-50 to-slate-200 rounded-b-xl overflow-hidden shadow-inner border border-t-0 border-slate-200"
+      >
+        {isVisible ? (
+          <Canvas shadows camera={{ position: [0, 1.5, 4], fov: 45 }}>
+            <Scene
+              modelUrl={modelUrl}
+              scale={scale}
+              hasAnimation={hasAnimation}
+              parts={parts}
+              hotspots={hotspots}
+              onPartClick={handlePartClick}
+              fileSize={fileSize}
+              lowDataMode={lowDataMode}
+            />
+          </Canvas>
+        ) : (
+          /* Placeholder before viewport entry */
+          <div className="w-full h-full flex flex-col items-center justify-center text-slate-400">
+            <Gauge className="w-10 h-10 mb-2 opacity-50" />
+            <p className="text-sm font-medium">Scroll to load 3D model</p>
+            {fileSize && (
+              <p className="text-xs mt-1">
+                {formatBytes(fileSize)} •{" "}
+                {fileSize > 3 * 1024 * 1024 ? "Large file" : "Quick load"}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Overlay Controls */}
         <div className="absolute top-4 right-4 flex flex-col gap-2">

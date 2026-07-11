@@ -230,7 +230,7 @@ export default function AdminModelsPage() {
     // if (profile && !["teacher", "admin"].includes(profile.role)) { ... }
 
     const edgeUrl = `/api/upload-model`;
-    const results: { title: string; success: boolean; error?: string }[] = [];
+    const results: { title: string; success: boolean; error?: string; compressionRatio?: number }[] = [];
 
     for (const upload of uploads) {
       try {
@@ -280,7 +280,11 @@ export default function AdminModelsPage() {
             error: data.error || `HTTP ${res.status}`,
           });
         } else {
-          results.push({ title: upload.title, success: true });
+          results.push({
+            title: upload.title,
+            success: true,
+            compressionRatio: data.compressionRatio,
+          });
         }
       } catch (err: any) {
         results.push({
@@ -296,8 +300,14 @@ export default function AdminModelsPage() {
     const succeeded = results.filter((r) => r.success).length;
     const failed = results.filter((r) => !r.success).length;
 
+    const compressed = results.filter((r) => r.success && r.compressionRatio);
     if (failed === 0) {
-      setSaveMessage(`✅ All ${succeeded} model(s) uploaded successfully!`);
+      setSaveMessage(
+        `✅ All ${succeeded} model(s) uploaded successfully!` +
+        (compressed.length > 0
+          ? ` (${compressed.length} compressed ${compressed[0].compressionRatio?.toFixed(1)}x smaller — saves data for students)`
+          : "")
+      );
     } else {
       setSaveMessage(
         `✅ ${succeeded} uploaded, ❌ ${failed} failed. Check console for details.`

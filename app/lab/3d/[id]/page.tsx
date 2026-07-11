@@ -64,6 +64,7 @@ export default async function ModelPage({ params }: Props) {
             hasAnimation={experiment.hasAnimation}
             parts={experiment.parts}
             hotspots={experiment.hotspots}
+            fileSize={experiment.fileSize}
           />
 
           <div className="bg-white rounded-lg border border-slate-200 p-4">

@@ -15,7 +15,7 @@ function getPublicModelUrl(storagePath: string | null): string | undefined {
   return `${supabaseUrl}/storage/v1/object/public/lab-models/${cleanPath}`;
 }
 
-export function mapDbExperiment(row: any): Experiment {
+export function mapDbExperiment(row: any, fileSize?: number): Experiment {
   return {
     id: row.id,
     title: row.title,
@@ -31,6 +31,7 @@ export function mapDbExperiment(row: any): Experiment {
     hasAnimation: row.has_animation ?? false,
     videoUrl: row.video_url ?? undefined,
     tags: row.tags ?? [],
+    fileSize,
     hotspots: [], // populated separately
   };
 }
@@ -54,12 +55,26 @@ export async function fetchExperiments(): Promise<Experiment[]> {
     return [];
   }
 
-  // Fetch all hotspots for these experiments
   const expIds = expRows.map((r) => r.id);
+
+  // Fetch hotspots
   const { data: hsRows } = await supabaseServer
     .from("hotspots")
     .select("*")
     .in("experiment_id", expIds);
+
+  // Fetch file sizes from upload audit log
+  const { data: uploadRows } = await supabaseServer
+    .from("model_uploads")
+    .select("storage_path, original_size_bytes")
+    .in("storage_path", expRows.map((r) => r.model_path).filter(Boolean));
+
+  const sizeByPath: Record<string, number> = {};
+  if (uploadRows) {
+    for (const u of uploadRows) {
+      sizeByPath[u.storage_path] = u.original_size_bytes;
+    }
+  }
 
   const hotspotsByExp: Record<string, Hotspot[]> = {};
   if (hsRows) {
@@ -74,7 +89,8 @@ export async function fetchExperiments(): Promise<Experiment[]> {
   }
 
   return expRows.map((row) => {
-    const exp = mapDbExperiment(row);
+    const fileSize = row.model_path ? sizeByPath[row.model_path] : undefined;
+    const exp = mapDbExperiment(row, fileSize);
     exp.hotspots = hotspotsByExp[row.id] ?? [];
     return exp;
   });
@@ -90,7 +106,18 @@ export async function fetchExperimentById(id: string): Promise<Experiment | null
 
   if (error || !row) return null;
 
-  const exp = mapDbExperiment(row);
+  // Fetch file size
+  let fileSize: number | undefined;
+  if (row.model_path) {
+    const { data: uploadRow } = await supabaseServer
+      .from("model_uploads")
+      .select("original_size_bytes")
+      .eq("storage_path", row.model_path)
+      .single();
+    fileSize = uploadRow?.original_size_bytes;
+  }
+
+  const exp = mapDbExperiment(row, fileSize);
 
   const { data: hsRows } = await supabaseServer
     .from("hotspots")

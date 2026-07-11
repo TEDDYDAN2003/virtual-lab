@@ -9,6 +9,42 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+/* ------------------------------------------------------------------ */
+/*  Optional Draco compression via gltf-transform                       */
+/*  Install: npm i @gltf-transform/core @gltf-transform/extensions      */
+/*           @gltf-transform/functions draco3d                          */
+/* ------------------------------------------------------------------ */
+async function compressGlb(buffer: ArrayBuffer): Promise<{ buffer: ArrayBuffer; ratio: number } | null> {
+  try {
+    const { NodeIO } = await import("@gltf-transform/core");
+    const { KHRONOS_EXTENSIONS } = await import("@gltf-transform/extensions");
+    const { draco, reorder, quantize, weld } = await import("@gltf-transform/functions");
+
+    const io = new NodeIO()
+      .registerExtensions(KHRONOS_EXTENSIONS)
+      .registerDependencies({
+        "draco3d.encoder": await import("draco3d").then((m) => m.createEncoderModule()),
+        "draco3d.decoder": await import("draco3d").then((m) => m.createDecoderModule()),
+      });
+
+    const document = await io.readBinary(new Uint8Array(buffer));
+
+    await document.transform(
+      weld({ tolerance: 0.0001 }),
+      reorder({ encoder: await import("draco3d").then((m) => m.createEncoderModule()) }),
+      quantize(),
+      draco({ method: "edgewise", quantizationBits: { position: 14, normal: 10, color: 8, texcoord: 12 } })
+    );
+
+    const compressed = await io.writeBinary(document);
+    const ratio = buffer.byteLength / compressed.byteLength;
+    return { buffer: compressed.buffer.slice(compressed.byteOffset, compressed.byteOffset + compressed.byteLength), ratio };
+  } catch {
+    // gltf-transform not installed — return null to skip compression
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -50,10 +86,23 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Compress if possible
+    let fileBuffer = await file.arrayBuffer();
+    let originalSize = fileBuffer.byteLength;
+    let compressedSize = originalSize;
+    let compressionRatio = 1;
+
+    const compressed = await compressGlb(fileBuffer);
+    if (compressed && compressed.ratio > 1.1) {
+      fileBuffer = compressed.buffer;
+      compressedSize = fileBuffer.byteLength;
+      compressionRatio = compressed.ratio;
+      console.log(`Compressed ${file.name}: ${(compressed.ratio).toFixed(1)}x smaller`);
+    }
+
     // Upload to Storage
     const fileExt = file.name.split(".").pop() ?? "glb";
     const storagePath = `models/${crypto.randomUUID()}.${fileExt}`;
-    const fileBuffer = await file.arrayBuffer();
 
     const { error: uploadError } = await supabaseAdmin.storage
       .from("lab-models")
@@ -119,11 +168,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Log upload
+    // Log upload with compression stats
     await supabaseAdmin.from("model_uploads").insert({
       original_name: file.name,
       storage_path: storagePath,
-      original_size_bytes: file.size,
+      original_size_bytes: originalSize,
+      compressed_size_bytes: compressedSize,
+      compression_ratio: compressionRatio,
       uploaded_by: null,
     });
 
@@ -131,7 +182,10 @@ export async function POST(req: NextRequest) {
       success: true,
       experimentId: experiment.id,
       storagePath,
-      message: "Model uploaded successfully",
+      compressionRatio: compressionRatio > 1 ? compressionRatio : undefined,
+      message: compressionRatio > 1
+        ? `Model uploaded & compressed ${compressionRatio.toFixed(1)}x smaller`
+        : "Model uploaded successfully",
     });
   } catch (err: any) {
     console.error("Upload API error:", err);

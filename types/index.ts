@@ -13,6 +13,8 @@ export interface Experiment {
   hasAnimation?: boolean;
   videoUrl?: string;
   tags: string[];
+  /** File size in bytes (for data-cost display) */
+  fileSize?: number;
   /** Clickable parts for models with named meshes */
   parts?: ModelPart[];
   /** Position-based hotspots for merged meshes */
