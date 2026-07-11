@@ -1,16 +1,12 @@
 "use client";
 
-import { X, Info, Volume2, VolumeX, Play, Pause, Globe } from "lucide-react";
+import { X, Info, Volume2, VolumeX, Play, Pause } from "lucide-react";
 import { useEffect, useState, useCallback, useRef } from "react";
 
 interface PartInfo {
   label: string;
-  labelSw?: string;
   description: string;
-  descriptionSw?: string;
 }
-
-type Lang = "en" | "sw";
 
 export default function PartInfoModal({
   part,
@@ -19,14 +15,9 @@ export default function PartInfoModal({
   part: PartInfo | null;
   onClose: () => void;
 }) {
-  const [lang, setLang] = useState<Lang>("en");
   const [speaking, setSpeaking] = useState(false);
   const [paused, setPaused] = useState(false);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-
-  const currentLabel = lang === "sw" && part?.labelSw ? part.labelSw : part?.label ?? "";
-  const currentDescription =
-    lang === "sw" && part?.descriptionSw ? part.descriptionSw : part?.description ?? "";
 
   /* Stop speech when modal closes or part changes */
   useEffect(() => {
@@ -55,7 +46,7 @@ export default function PartInfoModal({
   }, []);
 
   const speak = useCallback(() => {
-    if (!currentDescription || typeof window === "undefined") return;
+    if (!part?.description || typeof window === "undefined") return;
     if (!window.speechSynthesis) {
       alert("Text-to-speech is not supported in this browser.");
       return;
@@ -77,9 +68,9 @@ export default function PartInfoModal({
     // Start new speech
     window.speechSynthesis.cancel();
 
-    const text = `${currentLabel}. ${currentDescription}`;
+    const text = `${part.label}. ${part.description}`;
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = lang === "sw" ? "sw-KE" : "en-GB";
+    utterance.lang = "en-GB";
     utterance.rate = 0.9;
     utterance.pitch = 1;
 
@@ -100,16 +91,9 @@ export default function PartInfoModal({
 
     utteranceRef.current = utterance;
     window.speechSynthesis.speak(utterance);
-  }, [currentDescription, currentLabel, lang, speaking, paused]);
-
-  const toggleLang = useCallback(() => {
-    stopSpeech();
-    setLang((prev) => (prev === "en" ? "sw" : "en"));
-  }, [stopSpeech]);
+  }, [part, speaking, paused]);
 
   if (!part) return null;
-
-  const hasSwahili = !!(part.labelSw && part.descriptionSw);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -130,7 +114,7 @@ export default function PartInfoModal({
             <div className="p-1.5 bg-celebra-100 rounded-lg">
               <Info className="w-5 h-5 text-celebra-600" />
             </div>
-            <h2 className="text-lg font-bold text-slate-900">{currentLabel}</h2>
+            <h2 className="text-lg font-bold text-slate-900">{part.label}</h2>
           </div>
           <button
             onClick={() => {
@@ -144,38 +128,10 @@ export default function PartInfoModal({
           </button>
         </div>
 
-        {/* Language Toggle */}
-        {hasSwahili && (
-          <div className="px-6 pt-4">
-            <div className="inline-flex bg-slate-100 rounded-lg p-1">
-              <button
-                onClick={toggleLang}
-                className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                  lang === "en"
-                    ? "bg-white text-celebra-700 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                English
-              </button>
-              <button
-                onClick={toggleLang}
-                className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                  lang === "sw"
-                    ? "bg-white text-celebra-700 shadow-sm"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                Kiswahili
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Body */}
         <div className="px-6 py-5">
           <p className="text-slate-600 leading-relaxed text-sm">
-            {currentDescription}
+            {part.description}
           </p>
         </div>
 
@@ -202,7 +158,6 @@ export default function PartInfoModal({
             ) : (
               <>
                 <Volume2 className="w-4 h-4" /> Read Aloud
-                {lang === "sw" && <span className="text-xs opacity-80">(Soma kwa Sauti)</span>}
               </>
             )}
           </button>
@@ -218,16 +173,10 @@ export default function PartInfoModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 bg-slate-50 rounded-b-2xl border-t border-slate-100 flex items-center justify-between">
+        <div className="px-6 py-3 bg-slate-50 rounded-b-2xl border-t border-slate-100">
           <p className="text-xs text-slate-400">
             Click outside or press ESC to close
           </p>
-          {hasSwahili && (
-            <div className="flex items-center gap-1 text-xs text-slate-400">
-              <Globe className="w-3 h-3" />
-              {lang === "en" ? "English" : "Kiswahili"}
-            </div>
-          )}
         </div>
       </div>
     </div>
