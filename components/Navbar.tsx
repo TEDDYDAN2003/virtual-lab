@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FlaskConical, Box, Video, ImageIcon, Menu, X } from "lucide-react";
+import { FlaskConical, Box, Video, ImageIcon, Menu, X, Shield } from "lucide-react";
 import { useState } from "react";
 
 const navLinks = [
   { href: "/", label: "Experiments", icon: FlaskConical },
-  { href: "/lab/3d/mitochondria-001", label: "3D Lab", icon: Box },
+  { href: "/lab/3d/animal-cell-001", label: "3D Lab", icon: Box },
   { href: "/lab/video", label: "Videos", icon: Video },
   { href: "/lab/apparatus", label: "Apparatus", icon: ImageIcon },
+  { href: "/admin/models", label: "Admin", icon: Shield },
 ];
 
 export default function Navbar() {
