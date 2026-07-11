@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
         has_animation: metadata.hasAnimation ?? false,
         tags: metadata.tags ?? [],
         is_published: true,
-        created_by: "00000000-0000-0000-0000-000000000000",
+        created_by: null,
       })
       .select("id")
       .single();
@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
       original_name: file.name,
       storage_path: storagePath,
       original_size_bytes: file.size,
-      uploaded_by: "00000000-0000-0000-0000-000000000000",
+      uploaded_by: null,
     });
 
     return NextResponse.json({
