@@ -9,6 +9,8 @@ export interface Experiment {
   thumbnail: string;
   assetType: '3d_model' | 'video' | 'image' | 'mixed';
   modelUrl?: string;
+  modelScale?: number;
+  hasAnimation?: boolean;
   videoUrl?: string;
   tags: string[];
 }

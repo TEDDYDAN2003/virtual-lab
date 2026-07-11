@@ -23,10 +23,10 @@ export default function HomePage() {
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
             {[
-              { icon: Box, label: "3D Models", count: "3" },
+              { icon: Box, label: "3D Models", count: "14" },
               { icon: Video, label: "Videos", count: "4" },
               { icon: ImageIcon, label: "Apparatus", count: "5" },
-              { icon: FlaskConical, label: "Experiments", count: "5" },
+              { icon: FlaskConical, label: "Experiments", count: "16" },
             ].map((stat) => (
               <div
                 key={stat.label}

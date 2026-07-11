@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useRef, useState } from "react";
+import { Suspense, useRef, useState, useEffect } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import {
   OrbitControls,
@@ -8,64 +8,47 @@ import {
   Environment,
   Html,
   ContactShadows,
-  PresentationControls,
+  useAnimations,
+  Center,
 } from "@react-three/drei";
-import { Mesh } from "three";
-import { Loader2, Info, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
+import { Group } from "three";
+import { Loader2, Info, ZoomIn, ZoomOut, RotateCcw, Play, Pause } from "lucide-react";
 
-function Model({ url }: { url: string }) {
-  const { scene } = useGLTF(url);
-  const ref = useRef<Mesh>(null);
+function Model({ url, scale = 1.5, hasAnimation = false }: { url: string; scale?: number; hasAnimation?: boolean }) {
+  const group = useRef<Group>(null);
+  const { scene, animations } = useGLTF(url);
+  const { actions, names } = useAnimations(animations, group);
+
+  useEffect(() => {
+    if (hasAnimation && names.length > 0) {
+      const action = actions[names[0]];
+      if (action) {
+        action.reset().fadeIn(0.5).play();
+      }
+    }
+  }, [hasAnimation, actions, names]);
 
   useFrame((state) => {
-    if (ref.current) {
-      ref.current.rotation.y = state.clock.getElapsedTime() * 0.05;
+    if (group.current && !hasAnimation) {
+      group.current.rotation.y = state.clock.getElapsedTime() * 0.05;
     }
   });
 
   return (
-    <primitive
-      ref={ref}
-      object={scene}
-      scale={1.5}
-      position={[0, -0.5, 0]}
-    />
+    <group ref={group}>
+      <Center>
+        <primitive object={scene} scale={scale} />
+      </Center>
+    </group>
   );
 }
 
-function HotspotMarker({
-  position,
-  label,
-}: {
-  position: [number, number, number];
-  label: string;
-}) {
-  const [hovered, setHovered] = useState(false);
-
-  return (
-    <mesh
-      position={position}
-      onPointerOver={() => setHovered(true)}
-      onPointerOut={() => setHovered(false)}
-    >
-      <sphereGeometry args={[0.08, 16, 16]} />
-      <meshStandardMaterial color={hovered ? "#f59e0b" : "#0ea5e9"} />
-      {hovered && (
-        <Html distanceFactor={10}>
-          <div className="bg-white/90 backdrop-blur text-celebra-900 text-xs font-semibold px-2 py-1 rounded shadow-lg whitespace-nowrap">
-            {label}
-          </div>
-        </Html>
-      )}
-    </mesh>
-  );
-}
-
-function Scene({ modelUrl }: { modelUrl: string }) {
+function Scene({ modelUrl, scale, hasAnimation }: { modelUrl: string; scale?: number; hasAnimation?: boolean }) {
   return (
     <>
       <ambientLight intensity={0.6} />
       <directionalLight position={[5, 5, 5]} intensity={1} castShadow />
+      <directionalLight position={[-5, 3, -5]} intensity={0.4} />
       <Suspense
         fallback={
           <Html center>
@@ -76,7 +59,7 @@ function Scene({ modelUrl }: { modelUrl: string }) {
           </Html>
         }
       >
-        <Model url={modelUrl} />
+        <Model url={modelUrl} scale={scale} hasAnimation={hasAnimation} />
         <Environment preset="city" />
       </Suspense>
       <ContactShadows
@@ -88,23 +71,31 @@ function Scene({ modelUrl }: { modelUrl: string }) {
       />
       <OrbitControls
         makeDefault
-        autoRotate
+        autoRotate={!hasAnimation}
         autoRotateSpeed={0.8}
-        minDistance={2}
-        maxDistance={8}
+        minDistance={1.5}
+        maxDistance={10}
         enablePan={false}
       />
     </>
   );
 }
 
-export default function ModelViewer({ modelUrl }: { modelUrl: string }) {
+export default function ModelViewer({
+  modelUrl,
+  scale,
+  hasAnimation,
+}: {
+  modelUrl: string;
+  scale?: number;
+  hasAnimation?: boolean;
+}) {
   const [showHelp, setShowHelp] = useState(true);
 
   return (
     <div className="relative w-full h-[60vh] md:h-[70vh] bg-gradient-to-br from-slate-50 to-slate-200 rounded-xl overflow-hidden shadow-inner border border-slate-200">
       <Canvas shadows camera={{ position: [0, 1.5, 4], fov: 45 }}>
-        <Scene modelUrl={modelUrl} />
+        <Scene modelUrl={modelUrl} scale={scale} hasAnimation={hasAnimation} />
       </Canvas>
 
       {/* Overlay Controls */}
@@ -134,6 +125,11 @@ export default function ModelViewer({ modelUrl }: { modelUrl: string }) {
               <ZoomOut className="w-3 h-3" /> Right-click to pan
             </li>
           </ul>
+          {hasAnimation && (
+            <p className="mt-2 text-xs text-celebra-600 font-medium flex items-center gap-1">
+              <Play className="w-3 h-3" /> This model includes animation
+            </p>
+          )}
         </div>
       )}
 

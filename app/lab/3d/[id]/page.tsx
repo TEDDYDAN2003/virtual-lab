@@ -1,7 +1,7 @@
 import { experiments } from "@/lib/data";
 import ModelViewer from "@/components/ModelViewer";
 import { notFound } from "next/navigation";
-import { ArrowLeft, BookOpen, Layers, Rotate3D } from "lucide-react";
+import { ArrowLeft, BookOpen, Layers, Rotate3D, Play } from "lucide-react";
 import Link from "next/link";
 
 export function generateStaticParams() {
@@ -36,6 +36,11 @@ export default function ModelPage({ params }: { params: { id: string } }) {
               </h1>
               <p className="text-sm text-slate-500 mt-1">
                 {experiment.subject} • {experiment.gradeLevel}
+                {experiment.hasAnimation && (
+                  <span className="ml-2 inline-flex items-center gap-1 text-xs text-celebra-600 font-medium">
+                    <Play className="w-3 h-3" /> Animated
+                  </span>
+                )}
               </p>
             </div>
             <span className="hidden sm:inline-flex items-center gap-1 px-3 py-1 rounded-full bg-celebra-50 text-celebra-700 text-xs font-semibold border border-celebra-100">
@@ -43,7 +48,11 @@ export default function ModelPage({ params }: { params: { id: string } }) {
             </span>
           </div>
 
-          <ModelViewer modelUrl={experiment.modelUrl!} />
+          <ModelViewer
+            modelUrl={experiment.modelUrl!}
+            scale={experiment.modelScale}
+            hasAnimation={experiment.hasAnimation}
+          />
 
           <div className="bg-white rounded-lg border border-slate-200 p-4">
             <h3 className="font-semibold text-slate-900 mb-2">About this Model</h3>
