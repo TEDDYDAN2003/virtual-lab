@@ -229,7 +229,7 @@ export default function AdminModelsPage() {
     // if (!session) { ... }
     // if (profile && !["teacher", "admin"].includes(profile.role)) { ... }
 
-    const edgeUrl = `${SUPABASE_URL}/functions/v1/compress-and-upload`;
+    const edgeUrl = `/api/upload-model`;
     const results: { title: string; success: boolean; error?: string }[] = [];
 
     for (const upload of uploads) {
