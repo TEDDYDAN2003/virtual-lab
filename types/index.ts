@@ -28,7 +28,9 @@ export interface ModelPart {
 export interface Hotspot {
   position: [number, number, number];
   label: string;
+  labelSw?: string;
   description: string;
+  descriptionSw?: string;
 }
 
 export interface ApparatusItem {

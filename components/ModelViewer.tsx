@@ -142,7 +142,7 @@ function Model({
   hasAnimation?: boolean;
   parts?: ModelPart[];
   hotspots?: Hotspot[];
-  onPartClick: (part: { label: string; description: string }) => void;
+  onPartClick: (part: Hotspot | ModelPart) => void;
 }) {
   const group = useRef<Group>(null);
   const { scene, animations } = useGLTF(url);
@@ -230,7 +230,7 @@ function Scene({
   hasAnimation?: boolean;
   parts?: ModelPart[];
   hotspots?: Hotspot[];
-  onPartClick: (part: { label: string; description: string }) => void;
+  onPartClick: (part: Hotspot | ModelPart) => void;
 }) {
   return (
     <>
@@ -293,10 +293,10 @@ export default function ModelViewer({
   hotspots?: Hotspot[];
 }) {
   const [showHelp, setShowHelp] = useState(true);
-  const [selectedPart, setSelectedPart] = useState<{ label: string; description: string } | null>(null);
+  const [selectedPart, setSelectedPart] = useState<Hotspot | ModelPart | null>(null);
 
   const handlePartClick = useCallback(
-    (part: { label: string; description: string }) => {
+    (part: Hotspot | ModelPart) => {
       setSelectedPart(part);
     },
     []
