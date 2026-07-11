@@ -4,6 +4,8 @@ import { useState, useCallback, useRef } from "react";
 import { Upload, X, FileBox, Save, Plus, AlertCircle } from "lucide-react";
 import AdminModelPreview from "@/components/admin/AdminModelPreview";
 import Link from "next/link";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, assertEnv } from "@/lib/env";
+import { createClient } from "@/lib/supabaseClient";
 
 interface HotspotInput {
   position: [number, number, number];
@@ -138,7 +140,26 @@ export default function AdminModelsPage() {
     setSaving(true);
     setSaveMessage(null);
 
-    const edgeUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/compress-and-upload`;
+    try {
+      assertEnv();
+    } catch (err: any) {
+      setSaving(false);
+      setSaveMessage(`❌ ${err.message}`);
+      return;
+    }
+
+    const supabase = createClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      setSaving(false);
+      setSaveMessage("❌ You must be signed in to upload models.");
+      return;
+    }
+
+    const edgeUrl = `${SUPABASE_URL}/functions/v1/compress-and-upload`;
     const results: { title: string; success: boolean; error?: string }[] = [];
 
     for (const upload of uploads) {
@@ -167,12 +188,20 @@ export default function AdminModelsPage() {
         const res = await fetch(edgeUrl, {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+            Authorization: `Bearer ${session.access_token}`,
           },
           body: formData,
         });
 
-        const data = await res.json();
+        // Edge Functions return JSON on success, but HTML error pages on 404/500
+        let data: any = {};
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          data = await res.json();
+        } else {
+          const text = await res.text();
+          data = { error: text.slice(0, 200) || `HTTP ${res.status}` };
+        }
 
         if (!res.ok) {
           results.push({
@@ -199,8 +228,6 @@ export default function AdminModelsPage() {
 
     if (failed === 0) {
       setSaveMessage(`✅ All ${succeeded} model(s) uploaded successfully!`);
-      // Optionally clear uploads after success
-      // setUploads([]);
     } else {
       setSaveMessage(
         `✅ ${succeeded} uploaded, ❌ ${failed} failed. Check console for details.`
@@ -493,9 +520,9 @@ export default function AdminModelsPage() {
                   Preparing...
                 </>
               ) : (
-                <>
+                  <>
                   <Save className="w-4 h-4" />
-                  Prepare {uploads.length} Model{uploads.length > 1 ? "s" : ""} for Upload
+                  Upload {uploads.length} Model{uploads.length > 1 ? "s" : ""}
                 </>
               )}
             </button>
