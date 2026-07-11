@@ -1,10 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
 import { Experiment, Hotspot } from "@/types";
+import { SUPABASE_URL } from "./env";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-
-export const supabaseServer = createClient(supabaseUrl, supabaseServiceKey);
+function getServerClient() {
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+  if (!SUPABASE_URL || !supabaseServiceKey) {
+    throw new Error(
+      "Missing Supabase env vars. Ensure NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are in .env.local"
+    );
+  }
+  return createClient(SUPABASE_URL, supabaseServiceKey);
+}
 
 function getPublicModelUrl(storagePath: string | null): string | undefined {
   if (!storagePath) return undefined;
@@ -44,27 +50,33 @@ export function mapDbHotspots(rows: any[]): Hotspot[] {
   }));
 }
 
-export async function fetchExperiments(): Promise<Experiment[]> {
-  const { data: expRows, error: expError } = await supabaseServer
+export async function fetchExperiments(): Promise<{ experiments: Experiment[]; error?: string }> {
+  const supabase = getServerClient();
+  const { data: expRows, error: expError } = await supabase
     .from("experiments")
     .select("*")
     .eq("is_published", true)
     .order("created_at", { ascending: false });
 
-  if (expError || !expRows || expRows.length === 0) {
-    return [];
+  if (expError) {
+    console.error("[fetchExperiments] Supabase error:", expError.message);
+    return { experiments: [], error: expError.message };
+  }
+
+  if (!expRows || expRows.length === 0) {
+    return { experiments: [], error: "No published experiments found in Supabase. Upload via /admin/models." };
   }
 
   const expIds = expRows.map((r) => r.id);
 
   // Fetch hotspots
-  const { data: hsRows } = await supabaseServer
+  const { data: hsRows } = await supabase
     .from("hotspots")
     .select("*")
     .in("experiment_id", expIds);
 
   // Fetch file sizes from upload audit log
-  const { data: uploadRows } = await supabaseServer
+  const { data: uploadRows } = await supabase
     .from("model_uploads")
     .select("storage_path, original_size_bytes")
     .in("storage_path", expRows.map((r) => r.model_path).filter(Boolean));
@@ -88,16 +100,19 @@ export async function fetchExperiments(): Promise<Experiment[]> {
     }
   }
 
-  return expRows.map((row) => {
+  const experiments = expRows.map((row) => {
     const fileSize = row.model_path ? sizeByPath[row.model_path] : undefined;
     const exp = mapDbExperiment(row, fileSize);
     exp.hotspots = hotspotsByExp[row.id] ?? [];
     return exp;
   });
+
+  return { experiments };
 }
 
 export async function fetchExperimentById(id: string): Promise<Experiment | null> {
-  const { data: row, error } = await supabaseServer
+  const supabase = getServerClient();
+  const { data: row, error } = await supabase
     .from("experiments")
     .select("*")
     .eq("id", id)
@@ -109,7 +124,7 @@ export async function fetchExperimentById(id: string): Promise<Experiment | null
   // Fetch file size
   let fileSize: number | undefined;
   if (row.model_path) {
-    const { data: uploadRow } = await supabaseServer
+    const { data: uploadRow } = await supabase
       .from("model_uploads")
       .select("original_size_bytes")
       .eq("storage_path", row.model_path)
@@ -119,7 +134,7 @@ export async function fetchExperimentById(id: string): Promise<Experiment | null
 
   const exp = mapDbExperiment(row, fileSize);
 
-  const { data: hsRows } = await supabaseServer
+  const { data: hsRows } = await supabase
     .from("hotspots")
     .select("*")
     .eq("experiment_id", id);

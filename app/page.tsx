@@ -1,21 +1,25 @@
 import { fetchExperiments } from "@/lib/supabaseServer";
 import { experiments as staticExperiments } from "@/lib/data";
 import ExperimentCard from "@/components/ExperimentCard";
-import { FlaskConical, Box, Video, ImageIcon, BookOpen, Cloud, HardDrive } from "lucide-react";
+import { FlaskConical, Box, Video, ImageIcon, BookOpen, Cloud, HardDrive, AlertCircle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  let cloudExperiments = await fetchExperiments();
+  const { experiments: cloudExperiments, error: cloudError } = await fetchExperiments();
   const isCloud = cloudExperiments.length > 0;
 
-  // Fallback to static data if Supabase is empty
-  const experiments = isCloud ? cloudExperiments : staticExperiments;
+  // Merge: cloud experiments first, then static ones that aren't duplicated by ID
+  const cloudIds = new Set(cloudExperiments.map((e) => e.id));
+  const mergedExperiments = [
+    ...cloudExperiments,
+    ...staticExperiments.filter((e) => !cloudIds.has(e.id)),
+  ];
 
-  const modelsCount = experiments.filter((e) => e.assetType === "3d_model").length;
-  const videosCount = experiments.filter((e) => e.assetType === "video").length;
-  const imagesCount = experiments.filter((e) => e.assetType === "image").length;
-  const totalCount = experiments.length;
+  const modelsCount = mergedExperiments.filter((e) => e.assetType === "3d_model").length;
+  const videosCount = mergedExperiments.filter((e) => e.assetType === "video").length;
+  const imagesCount = mergedExperiments.filter((e) => e.assetType === "image").length;
+  const totalCount = mergedExperiments.length;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -56,29 +60,31 @@ export default async function HomePage() {
       </section>
 
       {/* Data Source Banner */}
-      <div
-        className={`mb-6 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border ${
-          isCloud
-            ? "bg-sky-50 text-sky-700 border-sky-200"
-            : "bg-amber-50 text-amber-700 border-amber-200"
-        }`}
-      >
-        {isCloud ? (
-          <>
-            <Cloud className="w-4 h-4" />
-            Showing live models from Supabase cloud ({cloudExperiments.length} uploaded)
-          </>
-        ) : (
-          <>
-            <HardDrive className="w-4 h-4" />
-            Showing local static models. Upload via{" "}
-            <a href="/admin/models" className="underline hover:text-amber-800">
-              Admin Dashboard
-            </a>{" "}
-            to populate the cloud library.
-          </>
-        )}
-      </div>
+      {cloudError ? (
+        <div className="mb-6 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border bg-red-50 text-red-700 border-red-200">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>Cloud fetch error: {cloudError}</span>
+          <a href="/admin/models" className="underline hover:text-red-800 ml-1">
+            Upload models
+          </a>
+        </div>
+      ) : isCloud ? (
+        <div className="mb-6 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border bg-sky-50 text-sky-700 border-sky-200">
+          <Cloud className="w-4 h-4" />
+          Showing {cloudExperiments.length} cloud model{cloudExperiments.length > 1 ? "s" : ""}
+          {mergedExperiments.length > cloudExperiments.length &&
+            ` + ${mergedExperiments.length - cloudExperiments.length} static fallback`}
+        </div>
+      ) : (
+        <div className="mb-6 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border bg-amber-50 text-amber-700 border-amber-200">
+          <HardDrive className="w-4 h-4" />
+          Showing {staticExperiments.length} local static models. Upload via{" "}
+          <a href="/admin/models" className="underline hover:text-amber-800">
+            Admin Dashboard
+          </a>{" "}
+          to add cloud models.
+        </div>
+      )}
 
       {/* Filters / Subjects */}
       <section className="mb-8">
@@ -103,7 +109,7 @@ export default async function HomePage() {
         <h2 className="text-2xl font-bold text-slate-900 mb-6">
           Featured Experiments
         </h2>
-        {experiments.length === 0 ? (
+        {mergedExperiments.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-xl border border-slate-200">
             <Box className="w-12 h-12 mx-auto text-slate-300 mb-3" />
             <h3 className="text-lg font-semibold text-slate-700 mb-1">
@@ -119,7 +125,7 @@ export default async function HomePage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {experiments.map((experiment) => (
+            {mergedExperiments.map((experiment) => (
               <ExperimentCard key={experiment.id} experiment={experiment} />
             ))}
           </div>
