@@ -1,8 +1,22 @@
-import { experiments } from "@/lib/data";
+import { fetchExperiments } from "@/lib/supabaseServer";
+import { experiments as staticExperiments } from "@/lib/data";
 import ExperimentCard from "@/components/ExperimentCard";
-import { FlaskConical, Box, Video, ImageIcon, BookOpen } from "lucide-react";
+import { FlaskConical, Box, Video, ImageIcon, BookOpen, Cloud, HardDrive } from "lucide-react";
 
-export default function HomePage() {
+export const dynamic = "force-dynamic";
+
+export default async function HomePage() {
+  let cloudExperiments = await fetchExperiments();
+  const isCloud = cloudExperiments.length > 0;
+
+  // Fallback to static data if Supabase is empty
+  const experiments = isCloud ? cloudExperiments : staticExperiments;
+
+  const modelsCount = experiments.filter((e) => e.assetType === "3d_model").length;
+  const videosCount = experiments.filter((e) => e.assetType === "video").length;
+  const imagesCount = experiments.filter((e) => e.assetType === "image").length;
+  const totalCount = experiments.length;
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Hero */}
@@ -23,10 +37,10 @@ export default function HomePage() {
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
             {[
-              { icon: Box, label: "3D Models", count: "14" },
-              { icon: Video, label: "Videos", count: "4" },
-              { icon: ImageIcon, label: "Apparatus", count: "5" },
-              { icon: FlaskConical, label: "Experiments", count: "16" },
+              { icon: Box, label: "3D Models", count: String(modelsCount) },
+              { icon: Video, label: "Videos", count: String(videosCount) },
+              { icon: ImageIcon, label: "Apparatus", count: String(imagesCount) },
+              { icon: FlaskConical, label: "Experiments", count: String(totalCount) },
             ].map((stat) => (
               <div
                 key={stat.label}
@@ -40,6 +54,31 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Data Source Banner */}
+      <div
+        className={`mb-6 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border ${
+          isCloud
+            ? "bg-sky-50 text-sky-700 border-sky-200"
+            : "bg-amber-50 text-amber-700 border-amber-200"
+        }`}
+      >
+        {isCloud ? (
+          <>
+            <Cloud className="w-4 h-4" />
+            Showing live models from Supabase cloud ({cloudExperiments.length} uploaded)
+          </>
+        ) : (
+          <>
+            <HardDrive className="w-4 h-4" />
+            Showing local static models. Upload via{" "}
+            <a href="/admin/models" className="underline hover:text-amber-800">
+              Admin Dashboard
+            </a>{" "}
+            to populate the cloud library.
+          </>
+        )}
+      </div>
 
       {/* Filters / Subjects */}
       <section className="mb-8">
@@ -64,11 +103,27 @@ export default function HomePage() {
         <h2 className="text-2xl font-bold text-slate-900 mb-6">
           Featured Experiments
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {experiments.map((experiment) => (
-            <ExperimentCard key={experiment.id} experiment={experiment} />
-          ))}
-        </div>
+        {experiments.length === 0 ? (
+          <div className="text-center py-16 bg-white rounded-xl border border-slate-200">
+            <Box className="w-12 h-12 mx-auto text-slate-300 mb-3" />
+            <h3 className="text-lg font-semibold text-slate-700 mb-1">
+              No experiments found
+            </h3>
+            <p className="text-sm text-slate-500">
+              Upload your first model via the{" "}
+              <a href="/admin/models" className="text-celebra-600 hover:underline">
+                Admin Dashboard
+              </a>
+              .
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {experiments.map((experiment) => (
+              <ExperimentCard key={experiment.id} experiment={experiment} />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* CBC Info */}

@@ -1,23 +1,31 @@
-import { experiments } from "@/lib/data";
+import { fetchExperimentById } from "@/lib/supabaseServer";
+import { experiments as staticExperiments } from "@/lib/data";
 import ModelViewer from "@/components/ModelViewer";
 import { notFound } from "next/navigation";
 import { ArrowLeft, BookOpen, Layers, Rotate3D, Play, MousePointerClick } from "lucide-react";
 import Link from "next/link";
 
-export function generateStaticParams() {
-  return experiments
-    .filter((e) => e.assetType === "3d_model")
-    .map((e) => ({ id: e.id }));
+export const dynamic = "force-dynamic";
+export const dynamicParams = true;
+
+interface Props {
+  params: { id: string };
 }
 
-export default function ModelPage({ params }: { params: { id: string } }) {
-  const experiment = experiments.find((e) => e.id === params.id);
+export default async function ModelPage({ params }: Props) {
+  let experiment = await fetchExperimentById(params.id);
+
+  // Fallback to static data if not found in cloud
+  if (!experiment) {
+    experiment = staticExperiments.find((e) => e.id === params.id) ?? null;
+  }
 
   if (!experiment || experiment.assetType !== "3d_model") {
     notFound();
   }
 
-  const hasInteractivity = (experiment.parts?.length || 0) > 0 || (experiment.hotspots?.length || 0) > 0;
+  const hasInteractivity =
+    (experiment.parts?.length || 0) > 0 || (experiment.hotspots?.length || 0) > 0;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
